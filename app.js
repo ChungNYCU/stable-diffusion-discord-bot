@@ -1,12 +1,14 @@
 import 'dotenv/config'
 import express from 'express'
 import { InteractionType, InteractionResponseType } from 'discord-interactions'
+import { txt2img } from './services/stableDiffusionService.js'
+import { uploadImg } from './services/imgurService.js'
 import { VerifyDiscordRequest, getRandomEmoji } from './utils.js'
+import txt2imgReqBody from './txt2imgReqBody.js';
 
-// Create an express app
 const app = express()
-// Get port, or default to 3000
 const PORT = process.env.PORT || 3000
+
 // Parse request body and verifies incoming requests using discord-interactions package
 app.use(express.json({ verify: VerifyDiscordRequest(process.env.PUBLIC_KEY) }))
 
@@ -16,6 +18,7 @@ app.use(express.json({ verify: VerifyDiscordRequest(process.env.PUBLIC_KEY) }))
 app.post('/interactions', async function (req, res) {
   // Interaction type and data
   const { type, id, data } = req.body
+  const { username } = req.body.user || ''
 
   /**
    * Handle verification requests
@@ -30,7 +33,6 @@ app.post('/interactions', async function (req, res) {
    */
   if (type === InteractionType.APPLICATION_COMMAND) {
     const { name } = data
-    console.log(data)
     // "test" command
     if (name === 'test') {
       // Send a message into the channel where command was triggered from
@@ -38,7 +40,7 @@ app.post('/interactions', async function (req, res) {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           // Fetches a random emoji to send from a helper function
-          content: 'hello world ' + getRandomEmoji(),
+          content: `Hello ${username} ${getRandomEmoji()}`,
         },
       })
     }
@@ -46,12 +48,18 @@ app.post('/interactions', async function (req, res) {
     // "txt2img" command
     if (name === 'txt2img') {
       // TODO: call local stable diffusion server and upload the result to a cloud hosted img platform.
-      const attachment = 'https://i.imgur.com/QF8t0J9.jpeg'
+      const prompt = data.options[0].value
+      const reqBody = JSON.parse(JSON.stringify(txt2imgReqBody))
+      reqBody.prompt += prompt
+      const img = await txt2img(reqBody)
+      const imgId = await uploadImg(img)
+
+      const attachment = `https://i.imgur.com/${imgId}`
+      // Edit msg send ealier
       return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           content: `txt2img ${getRandomEmoji()} \n ${attachment}`,
-          files: [attachment],
         },
       })
     }
